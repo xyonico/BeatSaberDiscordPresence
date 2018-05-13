@@ -1,5 +1,5 @@
 # BeatSaberDiscordPresence
-![Preview Screenshot](https://i.imgur.com/jFpCQmR.png)
+![Preview Screenshot](https://i.imgur.com/1T0iebY.png)
 
 # Installation
 *This plugin requires IPA which you will automatically get if you install [the Song Loader Plugin](https://github.com/xyonico/BeatSaberSongInjector/releases).*
