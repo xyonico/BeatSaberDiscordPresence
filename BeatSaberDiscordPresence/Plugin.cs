@@ -22,7 +22,7 @@ namespace BeatSaberDiscordPresence
 
 		public string Version
 		{
-			get { return "v2.0.1"; }
+			get { return "v2.0.2"; }
 		}
 		
 		public void OnApplicationStart()
