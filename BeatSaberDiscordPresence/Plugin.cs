@@ -8,8 +8,10 @@ namespace BeatSaberDiscordPresence
 {
 	public class Plugin : IPlugin
 	{
-		public static readonly DiscordRpc.RichPresence Presence = new DiscordRpc.RichPresence();
+		private const string MenuSceneName = "Menu";
+		private const string GameSceneName = "StandardLevel";
 		private const string DiscordAppID = "445053620698742804";
+		public static readonly DiscordRpc.RichPresence Presence = new DiscordRpc.RichPresence();
 		private MainGameSceneSetupData _mainSetupData;
 		private bool _init;
 		
@@ -20,14 +22,14 @@ namespace BeatSaberDiscordPresence
 
 		public string Version
 		{
-			get { return "v2.0"; }
+			get { return "v2.0.1"; }
 		}
 		
 		public void OnApplicationStart()
 		{
 			if (_init) return;
 			_init = true;
-			SceneManager.activeSceneChanged += SceneManagerOnActiveSceneChanged;
+			SceneManager.sceneLoaded += SceneManagerOnSceneLoaded;
 			
 			var handlers = new DiscordRpc.EventHandlers();
 			DiscordRpc.Initialize(DiscordAppID, ref handlers, false, string.Empty);
@@ -35,13 +37,13 @@ namespace BeatSaberDiscordPresence
 
 		public void OnApplicationQuit()
 		{
-			SceneManager.activeSceneChanged -= SceneManagerOnActiveSceneChanged;
+			SceneManager.sceneLoaded -= SceneManagerOnSceneLoaded;
 			DiscordRpc.Shutdown();
 		}
 
-		private void SceneManagerOnActiveSceneChanged(Scene oldScene, Scene newScene)
+		private void SceneManagerOnSceneLoaded(Scene newScene, LoadSceneMode mode)
 		{
-			if (newScene.buildIndex == 1)
+			if (newScene.name == MenuSceneName)
 			{
 				//Menu scene loaded
 				Presence.details = "In Menu";
@@ -53,7 +55,7 @@ namespace BeatSaberDiscordPresence
 				Presence.smallImageText = "Solo Standard";
 				DiscordRpc.UpdatePresence(Presence);
 			}
-			else if (newScene.buildIndex == 5)
+			else if (newScene.name == GameSceneName)
 			{
 				_mainSetupData = Resources.FindObjectsOfTypeAll<MainGameSceneSetupData>().FirstOrDefault();
 				if (_mainSetupData == null)
