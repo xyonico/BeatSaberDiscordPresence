@@ -9,10 +9,10 @@ namespace BeatSaberDiscordPresence
 	public class Plugin : IPlugin
 	{
 		private const string MenuSceneName = "Menu";
-		private const string GameSceneName = "StandardLevel";
+		private const string GameSceneName = "GameCore";
 		private const string DiscordAppID = "445053620698742804";
 		public static readonly DiscordRpc.RichPresence Presence = new DiscordRpc.RichPresence();
-		private MainGameSceneSetupData _mainSetupData;
+		private StandardLevelSceneSetupDataSO _mainSetupData;
 		private bool _init;
 		
 		public string Name
@@ -30,19 +30,14 @@ namespace BeatSaberDiscordPresence
 			if (_init) return;
 			_init = true;
 			SceneManager.sceneLoaded += SceneManagerOnSceneLoaded;
+			SceneManager.activeSceneChanged += SceneManagerOnActiveSceneChanged;
 			
 			var handlers = new DiscordRpc.EventHandlers();
 			DiscordRpc.Initialize(DiscordAppID, ref handlers, false, string.Empty);
 		}
 
-		public void OnApplicationQuit()
-		{
-			SceneManager.sceneLoaded -= SceneManagerOnSceneLoaded;
-			DiscordRpc.Shutdown();
-		}
-
-		private void SceneManagerOnSceneLoaded(Scene newScene, LoadSceneMode mode)
-		{
+		private void SceneManagerOnActiveSceneChanged(Scene oldScene, Scene newScene) {
+			Console.WriteLine("Discord Presence : " + newScene.name);
 			if (newScene.name == MenuSceneName)
 			{
 				//Menu scene loaded
@@ -57,45 +52,69 @@ namespace BeatSaberDiscordPresence
 			}
 			else if (newScene.name == GameSceneName)
 			{
-				_mainSetupData = Resources.FindObjectsOfTypeAll<MainGameSceneSetupData>().FirstOrDefault();
+				_mainSetupData = Resources.FindObjectsOfTypeAll<StandardLevelSceneSetupDataSO>().FirstOrDefault();
 				if (_mainSetupData == null)
 				{
 					Console.WriteLine("Discord Presence: Error finding the scriptable objects required to update presence.");
 					return;
 				}
-                //Main game scene loaded;
+				//Main game scene loaded;
 
-                var diff = _mainSetupData.difficultyLevel;
-                var level = diff.level;
+				var diff = _mainSetupData.difficultyBeatmap;
+				var level = diff.level;
 
 				Presence.details = $"{level.songName} | {diff.difficulty.Name()}";
 				Presence.state = "";
 				if (level.levelID.Contains('∎'))
 				{
-					Presence.state = "Custom | ";
+					Presence.state = "Custom ";
 				}
 
-				var gameplayModeText = GetGameplayModeName(_mainSetupData.gameplayMode);
-				Presence.state += gameplayModeText;
-				if (_mainSetupData.gameplayOptions.noEnergy)
+				//var gameplayModeText = GetGameplayModeName(_mainSetupData.gameplayCoreSetupData);
+				//Presence.state += gameplayModeText;
+				if (_mainSetupData.gameplayCoreSetupData.gameplayModifiers.noFail)
 				{
 					Presence.state += " [No Fail]";
-				}
-
-				if (_mainSetupData.gameplayOptions.mirror)
-				{
-					Presence.state += " [Mirrored]";
 				}
 				
 				Presence.largeImageKey = "default";
 				Presence.largeImageText = "Beat Saber";
-				Presence.smallImageKey = GetGameplayModeImage(_mainSetupData.gameplayMode);
-				Presence.smallImageText = gameplayModeText;
+				//Presence.smallImageKey = GetGameplayModeImage(_mainSetupData.gameplayMode);
+				//Presence.smallImageText = gameplayModeText;
 				Presence.startTimestamp = (long) DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
 				DiscordRpc.UpdatePresence(Presence);
 			}
 		}
 
+		public void OnApplicationQuit()
+		{
+			SceneManager.sceneLoaded -= SceneManagerOnSceneLoaded;
+			DiscordRpc.Shutdown();
+		}
+
+		private void SceneManagerOnSceneLoaded(Scene newScene, LoadSceneMode mode)
+		{
+			if (newScene.name == "GameCore") {
+				foreach (GameObject obj in newScene.GetRootGameObjects()) {
+					PrintChildren(obj);
+				}
+
+				var scripts = newScene.GetRootGameObjects().First().transform.Find("S").GetComponents<MonoBehaviour>();
+				foreach (var m in scripts) {
+					Console.WriteLine(m.GetType());
+				}
+			}
+		}
+
+		void PrintChildren(GameObject obj) {
+			if (obj.transform.childCount != 0) {
+				foreach (Transform child in obj.transform) {
+					Console.WriteLine("Discord Presence : " + obj.gameObject.name + " | " + child.gameObject.name);
+					PrintChildren(child.gameObject);
+				}
+			}
+		}
+		
 		public void OnLevelWasLoaded(int level)
 		{
 			
@@ -116,35 +135,31 @@ namespace BeatSaberDiscordPresence
 			
 		}
 
-		public static string GetGameplayModeName(GameplayMode gameplayMode)
+		public static string GetGameplayModeName(SoloModeSelectionViewController.MenuType gameplayMode)
 		{
 			switch (gameplayMode)
 			{
-				case GameplayMode.SoloStandard:
+				case SoloModeSelectionViewController.MenuType.FreePlayMode:
 					return "Solo Standard";
-				case GameplayMode.SoloOneSaber:
+				case SoloModeSelectionViewController.MenuType.OneSaberMode:
 					return "One Saber";
-				case GameplayMode.SoloNoArrows:
+				case SoloModeSelectionViewController.MenuType.NoArrowsMode:
 					return "No Arrows";
-				case GameplayMode.PartyStandard:
-					return "Party";
 				default:
 					return "Solo Standard";
 			}
 		}
 
-		private static string GetGameplayModeImage(GameplayMode gameplayMode)
+		private static string GetGameplayModeImage(SoloModeSelectionViewController.MenuType gameplayMode)
 		{
 			switch (gameplayMode)
 			{
-				case GameplayMode.SoloStandard:
+				case SoloModeSelectionViewController.MenuType.FreePlayMode:
 					return "solo";
-				case GameplayMode.SoloOneSaber:
+				case SoloModeSelectionViewController.MenuType.OneSaberMode:
 					return "one_saber";
-				case GameplayMode.SoloNoArrows:
+				case SoloModeSelectionViewController.MenuType.NoArrowsMode:
 					return "no_arrows";
-				case GameplayMode.PartyStandard:
-					return "party";
 				default:
 					return "solo";
 			}
