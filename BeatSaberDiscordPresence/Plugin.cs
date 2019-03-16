@@ -1,153 +1,157 @@
-﻿using System;
+﻿using IllusionPlugin;
+using System;
 using System.Linq;
-using IllusionPlugin;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace BeatSaberDiscordPresence
 {
-	public class Plugin : IPlugin
-	{
-		private const string MenuSceneName = "Menu";
-		private const string GameSceneName = "StandardLevel";
-		private const string DiscordAppID = "445053620698742804";
-		public static readonly DiscordRpc.RichPresence Presence = new DiscordRpc.RichPresence();
-		private MainGameSceneSetupData _mainSetupData;
-		private bool _init;
-		
-		public string Name
-		{
-			get { return "Discord Presence"; }
-		}
+    public class Plugin : IPlugin
+    {
+        private static readonly FieldInfo _gameplayCoreSceneSetupDataField = typeof(SceneSetup<GameplayCoreSceneSetupData>).GetField("_sceneSetupData", BindingFlags.NonPublic | BindingFlags.Instance);
+        private const string DiscordAppID = "445053620698742804";
+        private bool _pluginInit;
+        private bool _discordInit;
 
-		public string Version
-		{
-			get { return "v2.0.2"; }
-		}
-		
-		public void OnApplicationStart()
-		{
-			if (_init) return;
-			_init = true;
-			SceneManager.sceneLoaded += SceneManagerOnSceneLoaded;
-			
-			var handlers = new DiscordRpc.EventHandlers();
-			DiscordRpc.Initialize(DiscordAppID, ref handlers, false, string.Empty);
-		}
+        public string Name => "Discord Presence";
+        public string Version => "v2.1.0";
 
-		public void OnApplicationQuit()
-		{
-			SceneManager.sceneLoaded -= SceneManagerOnSceneLoaded;
-			DiscordRpc.Shutdown();
-		}
+        #region IPlugin Lifecycle
 
-		private void SceneManagerOnSceneLoaded(Scene newScene, LoadSceneMode mode)
-		{
-			if (newScene.name == MenuSceneName)
-			{
-				//Menu scene loaded
-				Presence.details = "In Menu";
-				Presence.state = string.Empty;
-				Presence.startTimestamp = default(long);
-				Presence.largeImageKey = "default";
-				Presence.largeImageText = "Beat Saber";
-				Presence.smallImageKey = "solo";
-				Presence.smallImageText = "Solo Standard";
-				DiscordRpc.UpdatePresence(Presence);
-			}
-			else if (newScene.name == GameSceneName)
-			{
-				_mainSetupData = Resources.FindObjectsOfTypeAll<MainGameSceneSetupData>().FirstOrDefault();
-				if (_mainSetupData == null)
-				{
-					Console.WriteLine("Discord Presence: Error finding the scriptable objects required to update presence.");
-					return;
-				}
-                //Main game scene loaded;
+        public void OnApplicationStart()
+        {
+            if (_pluginInit)
+            {
+                return;
+            }
 
-                var diff = _mainSetupData.difficultyLevel;
-                var level = diff.level;
+            _pluginInit = true;
 
-				Presence.details = $"{level.songName} | {diff.difficulty.Name()}";
-				Presence.state = "";
-				if (level.levelID.Contains('∎'))
-				{
-					Presence.state = "Custom | ";
-				}
+            try
+            {
+                var handlers = new DiscordRpc.EventHandlers();
+                Log("Connecting to Discord...");
+                DiscordRpc.Initialize(DiscordAppID, ref handlers, false, string.Empty);
+                _discordInit = true;
+            }
+            catch (Exception ex)
+            {
+                Log("Plugin setup failed: {0}", ex);
+                return;
+            }
 
-				var gameplayModeText = GetGameplayModeName(_mainSetupData.gameplayMode);
-				Presence.state += gameplayModeText;
-				if (_mainSetupData.gameplayOptions.noEnergy)
-				{
-					Presence.state += " [No Fail]";
-				}
+            SceneManager.activeSceneChanged += SceneManagerOnActiveSceneChanged;
+        }
 
-				if (_mainSetupData.gameplayOptions.mirror)
-				{
-					Presence.state += " [Mirrored]";
-				}
-				
-				Presence.largeImageKey = "default";
-				Presence.largeImageText = "Beat Saber";
-				Presence.smallImageKey = GetGameplayModeImage(_mainSetupData.gameplayMode);
-				Presence.smallImageText = gameplayModeText;
-				Presence.startTimestamp = (long) DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
-				DiscordRpc.UpdatePresence(Presence);
-			}
-		}
+        public void OnApplicationQuit()
+        {
+            SceneManager.activeSceneChanged -= SceneManagerOnActiveSceneChanged;
 
-		public void OnLevelWasLoaded(int level)
-		{
-			
-		}
+            if (_discordInit)
+            {
+                DiscordRpc.Shutdown();
+            }
+        }
 
-		public void OnLevelWasInitialized(int level)
-		{
-			
-		}
 
-		public void OnUpdate()
-		{
-			DiscordRpc.RunCallbacks();
-		}
+        public void OnLevelWasLoaded(int level)
+        {
+        }
 
-		public void OnFixedUpdate()
-		{
-			
-		}
+        public void OnLevelWasInitialized(int level)
+        {
+        }
 
-		public static string GetGameplayModeName(GameplayMode gameplayMode)
-		{
-			switch (gameplayMode)
-			{
-				case GameplayMode.SoloStandard:
-					return "Solo Standard";
-				case GameplayMode.SoloOneSaber:
-					return "One Saber";
-				case GameplayMode.SoloNoArrows:
-					return "No Arrows";
-				case GameplayMode.PartyStandard:
-					return "Party";
-				default:
-					return "Solo Standard";
-			}
-		}
+        public void OnUpdate()
+        {
+            if (_discordInit)
+            {
+                DiscordRpc.RunCallbacks();
+            }
+        }
 
-		private static string GetGameplayModeImage(GameplayMode gameplayMode)
-		{
-			switch (gameplayMode)
-			{
-				case GameplayMode.SoloStandard:
-					return "solo";
-				case GameplayMode.SoloOneSaber:
-					return "one_saber";
-				case GameplayMode.SoloNoArrows:
-					return "no_arrows";
-				case GameplayMode.PartyStandard:
-					return "party";
-				default:
-					return "solo";
-			}
-		}
+        public void OnFixedUpdate()
+        {
+        }
+
+        #endregion
+
+        #region Scene tracking
+
+        private void SceneManagerOnActiveSceneChanged(Scene oldScene, Scene newScene)
+        {
+            if (newScene.name == "MenuCore")
+            {
+                var presence = new DiscordRpc.RichPresence
+                {
+                    state = string.Empty,
+                    details = "In Menu",
+                    startTimestamp = default(long),
+                    largeImageKey = "default",
+                    largeImageText = "Beat Saber"
+                };
+
+                Publish(presence);
+            }
+
+            if (newScene.name == "GameCore")
+            {
+                var sceneManager = Resources.FindObjectsOfTypeAll<GameScenesManager>().FirstOrDefault();
+
+                if (sceneManager != null)
+                {
+                    sceneManager.transitionDidFinishEvent -= GameSceneWasLoaded;
+                    sceneManager.transitionDidFinishEvent += GameSceneWasLoaded;
+                }
+            }
+        }
+
+        private void GameSceneWasLoaded()
+        {
+            var sceneManager = Resources.FindObjectsOfTypeAll<GameScenesManager>().FirstOrDefault();
+            if (sceneManager != null)
+            {
+                sceneManager.transitionDidFinishEvent -= GameSceneWasLoaded;
+            }
+
+            var setup = Resources.FindObjectsOfTypeAll<GameplayCoreSceneSetup>().FirstOrDefault();
+            var data = _gameplayCoreSceneSetupDataField.GetValue(setup) as GameplayCoreSceneSetupData;
+
+            var diff = data.difficultyBeatmap;
+            var level = diff.level;
+
+            var presence = new DiscordRpc.RichPresence
+            {
+                state = data.GetModifiers(),
+                details = $"{level.songName} | {diff.difficulty.Name()}",
+                largeImageKey = "default",
+                largeImageText = "Beat Saber",
+                startTimestamp = (long)DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds,
+                smallImageKey = data.GetGameplayModeImage(),
+                smallImageText = data.difficultyBeatmap.parentDifficultyBeatmapSet.beatmapCharacteristic.hintText
+            };
+
+            Publish(presence);
+        }
+
+        #endregion
+
+        #region Utilities
+
+        private void Log(string format, params object[] args)
+        {
+            Console.WriteLine("[DiscordPresence] " + format, args);
+        }
+
+        private void Publish(DiscordRpc.RichPresence presence)
+        {
+            if (_discordInit)
+            {
+                DiscordRpc.UpdatePresence(presence);
+            }
+        }
+
+        #endregion
     }
 }
